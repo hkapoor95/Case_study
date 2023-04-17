@@ -1,4 +1,4 @@
-name: CI/CD with Terraform
+name: Blackrock CI/CD with Terraform
 on:
   push:
     branches:
@@ -33,9 +33,6 @@ jobs:
         run: |-
           terraform plan -destroy \
           -var="region=us-east-1" \
-          -var="public_key=$PUBLIC_SSH_KEY" \
-          -var="private_key=$PRIVATE_SSH_KEY" \
-          -var="key_name=deployer-key" \
           -out=PLAN
         working-directory: ./terraform
       - name: Terraform Apply
@@ -45,7 +42,7 @@ jobs:
       - name: Set output
         id: set-ip
         run: |-
-          echo "::set-output name=instance_public_ip::$(terraform output instance_public_ip)"
+          echo "::set-output name=rds_endpoint::${aws_db_instance.postgres_rds.endpoint}"
         working-directory: ./terraform
   deploy-app:
     runs-on: ubuntu-latest
@@ -53,8 +50,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      - name: Set IP env variable
-        run: echo SERVER_PUBLIC_IP=${{ needs.deploy-infra.outputs.SERVER_PUBLIC_IP }} >> $GITHUB_ENV
-      - name: Login to AWS ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+  sonarqube:
+    name: SonarQube Trigger
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checking out
+      uses: actions/checkout@main
+      with:
+        fetch-depth: 0
+    - name: SonarQube Scan
+      uses: kitabisa/sonarqube-action@v1.2.0
+      with:
+        host: ${{ secrets.SONARQUBE_HOST }}
+        login: ${{ secrets.SONARQUBE_TOKEN }}
+        projectBaseDir: "codeapp/"
+        projectKey: "sonar"
+
