@@ -1,59 +1,113 @@
-# fastapi-example [![CircleCI](https://circleci.com/gh/marciovrl/fastapi-example.svg?style=svg)](https://circleci.com/gh/marciovrl/fastapi-example)
+## Technologies:
+- Terraform
+- Github Actions
+- Node.js
+- Amazon RDS
+- AWS EC2
+- AWS S3
 
-A simple example of using Fast API in Python.
 
-## Preconditions:
+## Tasks:
 
-- Python 3
+- Get access id, secret id from AWS
+- Develop a simple api
+```js
+const express = require("express")
+const app = express()
 
-## Clone the project
+app.get("/",(req,res)=>{
+    res.send("Service is up and running")
+})
 
-```
-git clone https://github.com/marciovrl/fastapi-example.git
-```
-
-## Run local
-
-### Install dependencies
-
-```
-pip install -r requirements.txt
-```
-
-### Run server
-
-```
-uvicorn app.main:app --reload
+app.listen(8080,()=>{
+    console.log("Server is up")
+})
 ```
 
-### Run test
 
+- Generate SSH keys for connecting to EC2 instance
+- Create a S3 bucket for storing Terraform State file
+
+- Write Terraform Scripts for provisioning EC2 instance
+
+## Write CI/CD pipeline
+
+- Write Github Actions workflow: Set environment variables
+
+```yml
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  TF_STATE_BUCKET_NAME: ${{ secrets.AWS_TF_STATE_BUCKET_NAME }}
+  PRIVATE_SSH_KEY: ${{ secrets.AWS_SSH_KEY_PRIVATE }}
+  PUBLIC_SSH_KEY: ${{ secrets.AWS_SSH_KEY_PUBLIC }}
+  AWS_REGION: us-east-1
 ```
-pytest app/test.py
+- Setup backend for S3 bucket with terraform init
+
+```yml
+    - name: checkout repo
+      uses: actions/checkout@v2
+    - name: setup terraform
+      uses: hashicorp/setup-terraform@v1
+      with:
+        terraform_wrapper: false
+    - name: Terraform Init
+      id: init
+      run: terraform init -backend-config="bucket=$TF_STATE_BUCKET_NAME" -backend-config="region=us-east-1"
+      working-directory: ./terraform
 ```
 
-## Run with docker
+- Pass tf variables with Terraform plan
 
-### Run server
-
-```
-docker-compose up -d --build
-```
-
-### Run test
-
-```
-docker-compose exec app pytest test/test.py
+```yml
+- name: Terraform Plan
+  id: plan
+  run: |-
+    terraform plan \
+    -var="region=us-east-1" \
+    -out=PLAN
+  working-directory: ./terraform
 ```
 
-## API documentation (provided by Swagger UI)
+- Run terraform apply
 
-```
-http://127.0.0.1:8000/docs
+```yml
+- name: Terraform Apply
+    id: apply
+    run: |-
+      terraform apply PLAN
+    working-directory: ./terraform
 ```
 
-### Run server
+- Set EC2 instance public ip as job output
 
+```yml
+- name: Set output
+    id: set-dns
+    run: |-
+        echo "::set-output name=rds_endpoint::${aws_db_instance.postgres_rds.endpoint}"
+    working-directory: ./terraform
 ```
-docker-compose exec db psql --username=fastapi --dbname=fastapi_dev
+
+- Set ec2 public ip as environment variable for later use
+
+```yml
+- run: echo SERVER_PUBLIC_IP=${{ needs.deploy-infra.outputs.SERVER_PUBLIC_DNS }} >> $GITHUB_ENV
+```
+
+- Connect to EC2 using ssh and deploy docker container
+
+- Run Sonar to get Vulnerablities
+
+```yml
+- name: Checking out
+  uses: actions/checkout@main
+- name: SonarQube Scan
+  uses: kitabisa/sonarqube-action@v1.2.0
+  with:
+    host: ${{ secrets.SONARQUBE_HOST }}
+    login: ${{ secrets.SONARQUBE_TOKEN }}
+    projectBaseDir: "codeapp/"
+    projectKey: "sonar"
 ```
