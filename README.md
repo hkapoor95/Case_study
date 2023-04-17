@@ -81,7 +81,7 @@ env:
     working-directory: ./terraform
 ```
 
-- Set EC2 instance public ip as job output
+- Set RDS Endpoint job output
 
 ```yml
 - name: Set output
@@ -91,15 +91,7 @@ env:
     working-directory: ./terraform
 ```
 
-- Set ec2 public ip as environment variable for later use
-
-```yml
-- run: echo SERVER_PUBLIC_IP=${{ needs.deploy-infra.outputs.SERVER_PUBLIC_DNS }} >> $GITHUB_ENV
-```
-
-- Connect to EC2 using ssh and deploy docker container
-
-- Run Sonar to get Vulnerablities
+- Run Sonar to detect bugs, code smells
 
 ```yml
 - name: Checking out
