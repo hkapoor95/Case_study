@@ -11,17 +11,18 @@
 
 - Get access id, secret id from AWS
 - Develop a simple api
-```js
-const express = require("express")
-const app = express()
+```py
+@app.get("/")
+def root():
+    return {"message": "Fast API in Python"}
 
-app.get("/",(req,res)=>{
-    res.send("Service is up and running")
-})
+@app.get("/user")
+def read_user():
+    return api.read_user()
 
-app.listen(8080,()=>{
-    console.log("Server is up")
-})
+@app.get("/question/{position}", status_code=200)
+def read_questions(position: int, response: Response):
+    question = api.read_questions(position)
 ```
 
 
