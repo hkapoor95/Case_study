@@ -1,0 +1,80 @@
+name: Sonarqube
+
+on:
+  pull_request:
+    branches-ignore:
+      - stage
+      - test
+      - master
+      - prod
+    types: [opened, reopened, edited, synchronize]
+
+  schedule:
+    - cron: ' 0 20 * * *'
+
+jobs:
+  Check-Commit:
+    name: 'Check-Commit'
+    runs-on: ubuntu-latest
+    outputs:
+      commits: ${{ steps.getcommit.outputs.commits }}
+
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v1
+
+      - name: Get commit branch
+        run: |
+          echo "commit_branch=origin/$(echo $GITHUB_REF | awk -F '/' '{print $3}')" >> $GITHUB_ENV
+          if [[ "${{github.event_name}}" == "pull_request" ]]; then
+            echo "commit_branch=origin/${{github.head_ref}}" >> $GITHUB_ENV
+          fi
+      - name: 'Check any commit on ${{ env.commit_branch }}'
+        id: getcommit
+        run: |
+          echo "##[set-output name=commits;]$(git log ${{ env.commit_branch }} --since=1.day --pretty=format:"%cd")"
+
+  Sonarqube:
+    needs: Check-Commit
+    if: needs.Check-Commit.outputs.commits
+    name: Sonarqube
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v1
+
+      - name: Build
+        uses: actions/setup-node@v1
+        with:
+          node-version: '14.x'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Create npmrc file
+        run: envsubst < .npmrc_ci > .npmrc
+        env:
+          GH_PACKAGES_READ_ONLY: '${{ secrets.GH_PACKAGES_READ_ONLY }}'
+      - run: npm ci
+      - run: npm i -D sonarqube-scanner jest-sonar-reporter  @actions/core @actions/github
+      - run: npm install -g jest
+      - run: npm run test:coverage
+      - run: npm run build
+      - run: echo "REPOSITORY_NAME=$(echo '${{ github.repository }}' | awk -F '/' '{print $2}')" >> $GITHUB_ENV
+
+      - uses: actions/checkout@v2
+        with:
+          repository: xxxxxx/cweb-mgmt
+          ref: dev
+          path: cweb-mgmt
+          ssh-key: ${{ secrets.CWEB_MGMT_SSH }}
+          ssh-strict: false
+
+      - uses: ./xxxx/.github/actions/sonarqube
+        name: SonarQube
+        with:
+          SONAR_URL: ${{ secrets.SONAR_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_PROJECT_KEY: cweb.${{env.REPOSITORY_NAME}}
+          SONAR_PROJECT_NAME: ${{env.REPOSITORY_NAME}}
