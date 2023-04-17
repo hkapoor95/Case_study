@@ -1,0 +1,66 @@
+name: Blackduck
+
+on:
+  schedule:
+    - cron: '0 12 * * MON,THU'
+    - cron: '0 8 1,16 * *'
+jobs:
+  blackduck:
+    name: 'Blackduck'
+    runs-on: ubuntu-20.04
+
+    steps:
+      - if: contains(github.event.schedule, '0 12 * * MON,THU')
+        run: echo "FETCH_BRANCH=feature/case_study" >> $GITHUB_ENV
+
+      - name: Checkout the repository to fetch branch name
+        uses: actions/checkout@v1
+      - name: Get Production Branch
+        if: contains(github.event.schedule, '0 8 1,16 * *')
+        run: |
+          branches=$(git branch --all)
+          if grep -q "\bremotes/origin/prod\b" <<< "$branches"; then
+           echo "FETCH_BRANCH=prod" >> $GITHUB_ENV
+          elif grep -q "\bremotes/origin/master\b" <<< "$branches"; then
+           echo "FETCH_BRANCH=master" >> $GITHUB_ENV
+          elif grep -q "\bremotes/origin/main\b" <<< "$branches"; then
+           echo "FETCH_BRANCH=main" >> $GITHUB_ENV
+          fi
+
+      - name: Checkout the repository
+        uses: actions/checkout@v1
+        with:
+          ref: ${{ env.FETCH_BRANCH }}
+
+      - name: Use Node.js (14.x)
+        uses: actions/setup-node@v1
+        with:
+          node-version: '14.x'
+      - name: Create npmrc file
+        run: envsubst < .npmrc_ci > .npmrc
+        env:
+          GH_PACKAGES_READ_ONLY: '${{ secrets.GH_PACKAGES_READ_ONLY }}'
+      - run: npm ci
+      - run: npm run build
+
+      - uses: actions/checkout@v2
+        with:
+          repository: xxxxx/xxxxx
+          ref: dev
+          path: xxxxx
+          ssh-key: ${{ secrets.CWEB_MGMT_SSH }}
+          ssh-strict: false
+
+      - uses: ./xxxxx/.github/actions/vault
+        with:
+           VAULT_SERVER_URL: ${{secrets.VAULT_ADDR}}
+           VAULT_NAMESPACE: ${{secrets.VAULT_NAMESPACE}}
+           VAULT_TOKEN: ${{ secrets.VAULT_TOKEN_SECRET_ZERO }}
+           VAULT_SECRET_PATH: ${{secrets.VAULT_SECRET_PATH_BD}}
+           ROLE_NAME: ${{secrets.ROLE_NAME}}          
+
+      - uses: ./xxxxx/.github/actions/blackduck
+        with:
+          BLACKDUCK_ACCESS_TOKEN: ${{env.BLACKDUCK_API_TOKEN}}
+          BLACKDUCK_SERVER_URL: ${{env.BLACKDUCK_URL}}
+          BLACKDUCK_VERSION_NAME: ${{ env.FETCH_BRANCH }}
